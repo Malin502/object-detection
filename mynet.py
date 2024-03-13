@@ -1,3 +1,6 @@
+from math import sqrt
+from itertools import product as product
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -5,6 +8,7 @@ import torch.nn.functional as F
 
 import numpy as np
 import matplotlib.pyplot as plt
+
 
 
 def make_vgg():
@@ -104,3 +108,39 @@ class L2Norm(nn.Module):
             unsqueeze(3).expand_as(x) * x
             
         return out
+    
+
+class PriorBox(object):
+    def __init__(self):
+        super(PriorBox, self).__init__()
+        
+        self.image_size = 300
+        self.feature_maps = [38, 19, 10, 5, 3, 1]
+        self.steps = [8, 16, 32, 64, 100, 300]
+        self.min_sizes = [30, 60, 111, 162, 213, 264]
+        self.max_sizes = [60, 111, 162, 213, 264, 315]
+        self.aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
+        
+    def forward(self):
+        mean = []
+        
+        for k, f in enumerate(self.feature_maps):
+            for i, j in product(range(f), repeat=2):
+                f_k = self.image_size / self.steps[k]
+                cx = (j + 0.5) / f_k
+                cy = (i + 0.5) / f_k
+                
+                s_k = self.min_sizes[k] / self.image_size
+                mean += [cx, cy, s_k, s_k]
+                
+                s_k_prime = sqrt(s_k * (self.max_sizes[k] / self.image_size))
+                mean += [cx, cy, s_k_prime, s_k_prime]
+                
+                for ar in self.aspect_ratios[k]:
+                    mean += [cx, cy, s_k * sqrt(ar), s_k / sqrt(ar)]
+                    mean += [cx, cy, s_k / sqrt(ar), s_k * sqrt(ar)]
+        
+
+dbox = PriorBox()
+priors = dbox.forward()
+
