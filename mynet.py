@@ -139,8 +139,68 @@ class PriorBox(object):
                 for ar in self.aspect_ratios[k]:
                     mean += [cx, cy, s_k * sqrt(ar), s_k / sqrt(ar)]
                     mean += [cx, cy, s_k / sqrt(ar), s_k * sqrt(ar)]
+                    
+        output = torch.Tensor(mean).view(-1, 4) #出力をtorch.Size([8732, 4])に変形
+        output.clamp_(max=1, min=0) #座標を0~1の範囲に収める
+        
+        return output
         
 
 dbox = PriorBox()
 priors = dbox.forward()
 
+
+class SSD(nn.module):
+    def __init__(self, phase = 'train', num_classes = 21):
+        super(SSD, self).__init__()
+        self.phase = phase
+        self.num_classes = num_classes
+        
+        self.vgg = make_vgg()
+        self.extras = make_extras()
+        self.L2Norm = L2Norm()
+        self.loc = make_loc(num_classes)
+        self.conf = make_conf(num_classes)
+        
+        dbox = PriorBox()
+        self.priors = dbox.forward()
+        
+        if phase == 'test':
+            self.detect = Detect()
+            
+    def forward(self, x):
+        bs = len(x)
+        out, lout, cout = [], [], [] #出力を順に格納
+        
+        for i in range(23): #L2nornまでの０から２２層までを経ていることから算出
+            x = self.vgg[i](x)
+        
+        x1 = x #ここでほかの変数を置くことで分岐をしている
+        out.append(self.L2Norm(x1)) #L2Normを通してout1に格納
+        
+        for i in range(23, len(self.vgg)):
+            x = self.vgg[i](x)
+        out.append(x) #out2に格納
+        
+        for i in range(0,8,2): #0から6まで2つずつ取り出す
+            x = F.relu(self.extras[i](x), inplace=True) 
+            x = F.relu(self.extras[i+1](x), inplace=True) #reluを通してoutに格納
+            out.append(x)
+            
+        #outに格納されたものをそれぞれlocとconfに通す
+        for i in range(6):
+            lx = self.loc[i](out[i]).permute(0,2,3,1).reshape(bs, -1, 4)
+            cx = self.conf[i](out[i]).permute(0,2,3,1).reshape(bs, -1, self.num_classes)
+            
+            lout.append(lx)
+            cout.append(cx)
+        
+        lout = torch.cat(lout, 1)
+        cout = torch.cat(cout, 1)
+        
+        output = (lout, cout, self.priors)
+        if self.phase == 'test':
+            return self.detect.apply(output.self.num_classes)
+        else:
+            return output
+        
