@@ -9,6 +9,8 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 
+from detection import Detect
+
 
 
 def make_vgg():
@@ -143,7 +145,10 @@ class PriorBox(object):
         output = torch.Tensor(mean).view(-1, 4) #出力をtorch.Size([8732, 4])に変形
         output.clamp_(max=1, min=0) #座標を0~1の範囲に収める
         
-        return output
+        if self.phase == 'test':
+            return self.detect.apply(output, self.num_classes)
+        else:
+            return output
         
 
 dbox = PriorBox()

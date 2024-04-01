@@ -4,6 +4,7 @@ import torch
 import xml.etree.ElementTree as ET
 import pickle
 import random
+import torch.nn as nn
 
 
 ##(1) データの準備と設定
@@ -60,6 +61,19 @@ for ep in range(epoch_num):
                 
                 loss = loss_l + loss_c
                 print(i, loss_l.item(), loss_c.item())
+                
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_value_(net.parameters(), clip_value=2.0)
+                optimizer.step()
+                
+                loss_l, loss_c = 0, 0
+                xs, ys, bc = [], [], 0
+                
+##(5) モデルの保存(各エポックでモデルを保存)
+    outfile = 'ssd0_' + str(ep) + '.model'
+    torch.save(net.state_dict(), outfile)
+    print(outfile, "saved")
 
 
 image = cv2.imread(filename)
